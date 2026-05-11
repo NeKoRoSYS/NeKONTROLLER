@@ -1,5 +1,5 @@
-# (NKRsys-MIH) NeKoRoSYS's Mobile Input Handling
-An open-source project dedicated to providing mobile game developers a quick headstart on setting up mobile/touch controls for their Unity game.
+# NeKONTROLLER for Unity
+An open-source project dedicated to providing Unity game developers a quick headstart on setting up inputs and controls for their Unity game.
 
 <br>
 
