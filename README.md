@@ -1,5 +1,5 @@
 # NeKONTROLLER for Unity
-An open-source project dedicated to providing Unity game developers a quick headstart on setting up inputs and controls for their Unity game.
+A lightweight library that extends upon Unity's New Input System to provide granular and reliable functionalities for input controls.
 
 <br>
 
