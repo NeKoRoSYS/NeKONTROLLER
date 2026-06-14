@@ -5,15 +5,17 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace NeKoRoSYS.InputHandling {
-    [CreateAssetMenu(fileName = "InputReader", menuName = "Controls/InputReader", order = 0)]
+    [CreateAssetMenu(fileName = "Input Reader", menuName = "Controls/Input Reader", order = 0)]
     public class InputReader : StaticScriptableObject<InputReader>
     { 
         public bool inGame;
-        private bool isPaused;
-        private bool ShouldProcessInput() => inGame && !isPaused;
+        public Func<bool> IsGamePaused;
+        private bool IsPaused() => IsGamePaused?.Invoke() == true;
+        private bool ShouldProcessInput() => inGame && !IsPaused();
         // this is an optional function to filter out input if game state is set to paused or if you're not in live gameplay
 
         public PlayerInputActions playerInputActions;
+        public InputAction lookAction;
         public Action<InputSnapshot> OnInputSnapshot;
         public Action<InputDevice, InputDeviceChange> OnDeviceChange;
         public Action<InputButtons, bool> OnButtonInput; 
@@ -65,12 +67,12 @@ namespace NeKoRoSYS.InputHandling {
             playerInputActions = new PlayerInputActions();
             
             CacheInputMappings();
-
+            playerInputActions.Default.Look.performed += ProcessLook;
+            playerInputActions.Default.Look.canceled += ProcessLook;
             playerInputActions.Default.Move.started += ProcessMove;
             playerInputActions.Default.Move.performed += ProcessMove;
             playerInputActions.Default.Move.canceled += ProcessMove;
-            playerInputActions.Default.Look.performed += ProcessLook;
-            playerInputActions.Default.Look.canceled += ProcessLook;
+            lookAction = playerInputActions.Default.Look;
 
             foreach (var action in playerInputActions.asset)
             {
@@ -91,11 +93,11 @@ namespace NeKoRoSYS.InputHandling {
             base.OnDisable();
             if (playerInputActions == null) return;
             InputSystem.onActionChange -= HandleActionChange;
+            playerInputActions.Default.Look.performed -= ProcessLook;
+            playerInputActions.Default.Look.canceled -= ProcessLook;
             playerInputActions.Default.Move.started -= ProcessMove;
             playerInputActions.Default.Move.performed -= ProcessMove;
             playerInputActions.Default.Move.canceled -= ProcessMove;
-            playerInputActions.Default.Look.performed -= ProcessLook;
-            playerInputActions.Default.Look.canceled -= ProcessLook;
 
             foreach (var action in playerInputActions.asset)
             {
@@ -123,7 +125,6 @@ namespace NeKoRoSYS.InputHandling {
             currentButtons = InputButtons.None;
             persistentButtons = InputButtons.None;
             moveInput = Vector2.zero;
-            lookInput = Vector2.zero;
             activeBuffers = 0;
             Array.Clear(inputBufferTimers, 0, inputBufferTimers.Length);
             MarkDirty();
@@ -240,16 +241,7 @@ namespace NeKoRoSYS.InputHandling {
             }
         }
 
-        private void ProcessLook(InputAction.CallbackContext ctx)
-        {
-            Vector2 newValue = ctx.performed ? ctx.ReadValue<Vector2>() : Vector2.zero;
-            if (lookInput != newValue)
-            {
-                lookInput = newValue;
-                OnLookInput?.Invoke(lookInput);
-                MarkDirty();
-            }
-        }
+        private void ProcessLook(InputAction.CallbackContext ctx) => MarkDirty();
         #endregion
 
         #region State Management
@@ -266,19 +258,22 @@ namespace NeKoRoSYS.InputHandling {
 
         public void FlushSnapshot(bool force)
         {
+            lookInput = lookAction.ReadValue<Vector2>(); 
             if (!snapshotDirty && !force) return;
             if ((activeBuffers & (uint)InputButtons.Jump) != 0) persistentButtons |= InputButtons.JumpBuffered;
             else persistentButtons &= ~InputButtons.JumpBuffered;
             if ((activeBuffers & (uint)InputButtons.Fire) != 0) persistentButtons |= InputButtons.FireBuffered;
             else persistentButtons &= ~InputButtons.FireBuffered;
+            OnLookInput?.Invoke(lookInput);
             OnInputSnapshot?.Invoke(new InputSnapshot
             {
                 moveX = (sbyte)(moveInput.x * 127f),
                 moveY = (sbyte)(moveInput.y * 127f),
-                lookX = (short)lookInput.x,
-                lookY = (short)lookInput.y,
+                lookX = (short)(lookInput.x * 100f),
+                lookY = (short)(lookInput.y * 100f),
                 buttons = persistentButtons
             });
+            lookInput = Vector2.zero;
             bool requiresReleaseFlush = (persistentButtons & ~(InputButtons.JumpBuffered | InputButtons.FireBuffered)) != currentButtons;
             persistentButtons = currentButtons; 
             snapshotDirty = requiresReleaseFlush;
@@ -294,8 +289,8 @@ namespace NeKoRoSYS.InputHandling {
         public short lookX; 
         public short lookY; 
         public InputButtons buttons;
-        public readonly Vector2 GetMove() => new(moveX / 127f, moveY / 127f);
-        public readonly Vector2 GetLook() => new(lookX, lookY);
+        public readonly Vector2 GetMove() => new(moveX * 0.00787401574f, moveY * 0.00787401574f);
+        public readonly Vector2 GetLook() => new(lookX * 0.01f, lookY * 0.01f);
         public readonly bool IsJumpPressed => (buttons & (InputButtons.Jump | InputButtons.JumpBuffered)) != 0;
         public readonly bool IsSprinting => (buttons & InputButtons.Sprint) != 0;
         public readonly bool IsCrouching => (buttons & InputButtons.Crouch) != 0;
