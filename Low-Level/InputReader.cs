@@ -6,8 +6,7 @@ using UnityEngine.InputSystem;
 
 namespace NeKoRoSYS.InputHandling {
     [CreateAssetMenu(fileName = "Input Reader", menuName = "Controls/Input Reader", order = 0)]
-    public class InputReader : StaticScriptableObject<InputReader>
-    { 
+    public class InputReader : StaticScriptableObject<InputReader> { 
         public bool inGame;
         public Func<bool> IsGamePaused;
         private bool IsPaused() => IsGamePaused?.Invoke() == true;
@@ -43,39 +42,32 @@ namespace NeKoRoSYS.InputHandling {
             }
         }
 
-        private Dictionary<Guid, InputButtons> buttonMap = new();
+        private Dictionary<InputAction, InputButtons> buttonMap = new();
         private Dictionary<InputButtons, Action<bool>> explicitInputs = new(new InputButtonComparer());
-        public void Bind(InputButtons button, Action<bool> callback)
-        {
+        public void Bind(InputButtons button, Action<bool> callback) {
             if (!explicitInputs.ContainsKey(button)) explicitInputs[button] = callback;
             else explicitInputs[button] += callback;
         }
 
-        public void Unbind(InputButtons button, Action<bool> callback)
-        {
-            if (explicitInputs.ContainsKey(button)) 
-            {
-                explicitInputs[button] -= callback;
-                if (explicitInputs[button] == null) explicitInputs.Remove(button);
-            }
+        public void Unbind(InputButtons button, Action<bool> callback) {
+            if (!explicitInputs.ContainsKey(button)) return;
+            explicitInputs[button] -= callback;
+            if (explicitInputs[button] == null) explicitInputs.Remove(button);
         }
 
         #region Event Handling
-        protected override void OnEnable()
-        {
+        protected override void OnEnable() {
             base.OnEnable();
             playerInputActions = new PlayerInputActions();
             
             CacheInputMappings();
-            playerInputActions.Default.Look.performed += ProcessLook;
-            playerInputActions.Default.Look.canceled += ProcessLook;
-            playerInputActions.Default.Move.started += ProcessMove;
+            lookAction = playerInputActions.Default.Look;
+            lookAction.performed += ProcessLook;
+            lookAction.canceled += ProcessLook;
             playerInputActions.Default.Move.performed += ProcessMove;
             playerInputActions.Default.Move.canceled += ProcessMove;
-            lookAction = playerInputActions.Default.Look;
 
-            foreach (var action in playerInputActions.asset)
-            {
+            foreach (var action in playerInputActions.asset) {
                 if (action.name == "Move" || action.name == "Look") continue;
                 action.performed += HandleAction;
                 action.canceled += HandleAction;
@@ -88,19 +80,16 @@ namespace NeKoRoSYS.InputHandling {
             InputSystem.onActionChange += HandleActionChange;
         }
 
-        protected override void OnDisable()
-        {
+        protected override void OnDisable() {
             base.OnDisable();
             if (playerInputActions == null) return;
             InputSystem.onActionChange -= HandleActionChange;
-            playerInputActions.Default.Look.performed -= ProcessLook;
-            playerInputActions.Default.Look.canceled -= ProcessLook;
+            lookAction.performed -= ProcessLook;
+            lookAction.canceled -= ProcessLook;
             playerInputActions.Default.Move.started -= ProcessMove;
             playerInputActions.Default.Move.performed -= ProcessMove;
             playerInputActions.Default.Move.canceled -= ProcessMove;
-
-            foreach (var action in playerInputActions.asset)
-            {
+            foreach (var action in playerInputActions.asset) {
                 if (action.name == "Move" || action.name == "Look") continue;
                 action.performed -= HandleAction;
                 action.canceled -= HandleAction;
@@ -114,14 +103,12 @@ namespace NeKoRoSYS.InputHandling {
             if (change == InputActionChange.BoundControlsChanged) CacheInputMappings();
         }
 
-        public void ToggleInputs(bool enable)
-        {
+        public void ToggleInputs(bool enable) {
             if (enable) playerInputActions.Default.Enable();
             else { playerInputActions.Default.Disable(); ClearAllInputs(); }
         }
 
-        private void ClearAllInputs()
-        {
+        private void ClearAllInputs() {
             currentButtons = InputButtons.None;
             persistentButtons = InputButtons.None;
             moveInput = Vector2.zero;
@@ -135,22 +122,17 @@ namespace NeKoRoSYS.InputHandling {
         #endregion
 
         #region Dynamic Routing
-        private void CacheInputMappings()
-        {
+        private void CacheInputMappings() {
             buttonMap.Clear();
-            foreach (var action in playerInputActions.asset)
-            {
-                if (Enum.TryParse(action.name, out InputButtons buttonMapping)) buttonMap[action.id] = buttonMapping;
+            foreach (var action in playerInputActions.asset) {
+                if (Enum.TryParse(action.name, out InputButtons buttonMapping)) buttonMap[action] = buttonMapping;
             }
         }
 
-        private void HandleAction(InputAction.CallbackContext ctx)
-        {
+        private void HandleAction(InputAction.CallbackContext ctx) {
             if (!ShouldProcessInput()) return;
-            if (buttonMap.TryGetValue(ctx.action.id, out InputButtons button))
-            {
-                if (ctx.performed || ctx.canceled)
-                {
+            if (buttonMap.TryGetValue(ctx.action, out InputButtons button)) {
+                if (ctx.performed || ctx.canceled) {
                     bool isPressed = ctx.ReadValueAsButton();
                     SetButtonState(button, isPressed);
                     OnButtonInput?.Invoke(button, isPressed);
@@ -169,18 +151,15 @@ namespace NeKoRoSYS.InputHandling {
         private uint activeBuffers = 0;
         private const float inputBufferDuration = 0.2f;
 
-        private static readonly int[] DeBruijnPositions = 
-        {
+        private static readonly int[] DeBruijnPositions = {
             0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
             31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
         };
 
         private int GetButtonIndex(uint bitFlag) => DeBruijnPositions[((bitFlag & (uint)-(int)bitFlag) * 0x077CB531U) >> 27];
-        public void BufferInput(InputButtons button)
-        {
+        public void BufferInput(InputButtons button) {
             uint remainingButtons = (uint)button;
-            while (remainingButtons != 0)
-            {
+            while (remainingButtons != 0) {
                 uint singleButtonMask = remainingButtons & (uint)-(int)remainingButtons; 
                 int index = GetButtonIndex(singleButtonMask);
                 inputBufferTimers[index] = inputBufferDuration;
@@ -189,15 +168,12 @@ namespace NeKoRoSYS.InputHandling {
             }
         }
 
-        public bool ConsumeBufferedInput(InputButtons button)
-        {
+        public bool ConsumeBufferedInput(InputButtons button) {
             uint buttonMask = (uint)button;
             
-            if ((activeBuffers & buttonMask) != 0)
-            {
+            if ((activeBuffers & buttonMask) != 0) {
                 int index = GetButtonIndex(buttonMask);
-                if (inputBufferTimers[index] > 0f)
-                {
+                if (inputBufferTimers[index] > 0f) {
                     inputBufferTimers[index] = 0f;
                     activeBuffers &= ~buttonMask; 
                     MarkDirty();
@@ -207,17 +183,14 @@ namespace NeKoRoSYS.InputHandling {
             return false;
         }
 
-        public void TickInputBuffers(float deltaTime)
-        {
+        public void TickInputBuffers(float deltaTime) {
             if (activeBuffers == 0) return; 
             uint remainingBuffers = activeBuffers;
-            while (remainingBuffers != 0)
-            {
+            while (remainingBuffers != 0) {
                 uint buttonMask = remainingBuffers & (uint)-(int)remainingBuffers;
                 int index = GetButtonIndex(buttonMask);
                 inputBufferTimers[index] = Math.Max(0, inputBufferTimers[index] - deltaTime);
-                if (inputBufferTimers[index] <= 0f)
-                {
+                if (inputBufferTimers[index] <= 0f) {
                     activeBuffers &= ~buttonMask; 
                     MarkDirty();                  
                 }
@@ -230,11 +203,9 @@ namespace NeKoRoSYS.InputHandling {
         public Vector2 moveInput, lookInput;
         public Action<Vector2> OnMoveInput, OnLookInput;
 
-        private void ProcessMove(InputAction.CallbackContext ctx)
-        {
+        private void ProcessMove(InputAction.CallbackContext ctx) {
             Vector2 newValue = ctx.performed ? ctx.ReadValue<Vector2>() : Vector2.zero;
-            if (moveInput != newValue) 
-            {
+            if (moveInput != newValue) {
                 moveInput = newValue;
                 OnMoveInput?.Invoke(moveInput);
                 MarkDirty();
@@ -249,24 +220,21 @@ namespace NeKoRoSYS.InputHandling {
         private bool snapshotDirty;
         private void MarkDirty() => snapshotDirty = true;
         
-        private void SetButtonState(InputButtons button, bool pressed)
-        {
+        private void SetButtonState(InputButtons button, bool pressed) {
             if (pressed) { currentButtons |= button; persistentButtons |= button; }
             else  currentButtons &= ~button;
             MarkDirty();
         }
 
-        public void FlushSnapshot(bool force)
-        {
-            lookInput = lookAction.ReadValue<Vector2>(); 
+        public void FlushSnapshot(bool force)  {
+            lookInput = lookAction.ReadValue<Vector2>();
             if (!snapshotDirty && !force) return;
             if ((activeBuffers & (uint)InputButtons.Jump) != 0) persistentButtons |= InputButtons.JumpBuffered;
             else persistentButtons &= ~InputButtons.JumpBuffered;
             if ((activeBuffers & (uint)InputButtons.Fire) != 0) persistentButtons |= InputButtons.FireBuffered;
             else persistentButtons &= ~InputButtons.FireBuffered;
             OnLookInput?.Invoke(lookInput);
-            OnInputSnapshot?.Invoke(new InputSnapshot
-            {
+            OnInputSnapshot?.Invoke(new InputSnapshot {
                 moveX = (sbyte)(moveInput.x * 127f),
                 moveY = (sbyte)(moveInput.y * 127f),
                 lookX = (short)(lookInput.x * 100f),
@@ -282,8 +250,7 @@ namespace NeKoRoSYS.InputHandling {
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public struct InputSnapshot : IDisposable
-    {
+    public struct InputSnapshot : IDisposable {
         public sbyte moveX; 
         public sbyte moveY; 
         public short lookX; 
@@ -299,8 +266,7 @@ namespace NeKoRoSYS.InputHandling {
     }
 
     [Flags]
-    public enum InputButtons : uint
-    {
+    public enum InputButtons : uint {
         None       = 0,
         Jump       = 1 << 0,
         Sprint     = 1 << 1,
@@ -318,9 +284,8 @@ namespace NeKoRoSYS.InputHandling {
         FireBuffered = 1u << 31
     }
 
-    public struct InputButtonComparer : IEqualityComparer<InputButtons>
-    {
-        public bool Equals(InputButtons x, InputButtons y) => x == y;
-        public int GetHashCode(InputButtons obj) => (int)obj;
+    public struct InputButtonComparer : IEqualityComparer<InputButtons> {
+        public readonly bool Equals(InputButtons x, InputButtons y) => x == y;
+        public readonly int GetHashCode(InputButtons obj) => (int)obj;
     }
 }
