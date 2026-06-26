@@ -86,7 +86,6 @@ namespace NeKoRoSYS.InputHandling {
             InputSystem.onActionChange -= HandleActionChange;
             lookAction.performed -= ProcessLook;
             lookAction.canceled -= ProcessLook;
-            playerInputActions.Default.Move.started -= ProcessMove;
             playerInputActions.Default.Move.performed -= ProcessMove;
             playerInputActions.Default.Move.canceled -= ProcessMove;
             foreach (var action in playerInputActions.asset) {
